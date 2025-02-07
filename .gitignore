@@ -22,6 +22,7 @@ wheels/
 
 # Virtual Environment
 venv/
+.venv/
 env/
 ENV/
 
@@ -46,6 +47,7 @@ log/
 # Environment variables
 .env
 .env.*
+!.env.example
 
 # OS generated files
 .DS_Store
@@ -99,6 +101,21 @@ MANIFEST
 # Celery
 celerybeat-schedule
 celerybeat.pid
+
+# Project specific
+cache/
+output/
+temp/
+backups/
+data/
+reports/
+automation.log
+deep_learning.log
+practice_system.log
+test_deepseek.log
+test_questions.log
+test_results.log
+auto_developer.log
 
 # SageMath parsed files
 *.sage.py
