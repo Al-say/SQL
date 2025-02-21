@@ -1,0 +1,15 @@
+# System files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.log
+
+# Build output
+dist/
+build/
