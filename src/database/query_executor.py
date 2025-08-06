@@ -7,16 +7,21 @@ SQL查询执行器
 from typing import List, Dict, Any, Optional, Tuple, TYPE_CHECKING
 import time
 from datetime import datetime
+import logging
 
-if TYPE_CHECKING:
+# 可选依赖导入
+try:
     from sqlalchemy import text
     from sqlalchemy.exc import SQLAlchemyError
+    HAS_SQLALCHEMY = True
+except ImportError:
+    HAS_SQLALCHEMY = False
+
+if TYPE_CHECKING:
     import pandas as pd
 
 from .connection_manager import ConnectionManager
 
-# 使用标准日志库替代loguru
-import logging
 logger = logging.getLogger(__name__)
 
 
@@ -27,7 +32,7 @@ class QueryResult:
                  error: Optional[str] = None, execution_time: float = 0.0,
                  affected_rows: int = 0):
         self.success = success
-        self.data = data  # 改为List[Dict]而不是pandas DataFrame
+        self.data = data or []
         self.error = error
         self.execution_time = execution_time
         self.affected_rows = affected_rows
@@ -88,6 +93,12 @@ class QueryExecutor:
         Returns:
             QueryResult: 查询结果
         """
+        if not HAS_SQLALCHEMY:
+            return QueryResult(
+                success=False,
+                error="SQLAlchemy未安装，请使用简化版本或安装依赖"
+            )
+            
         start_time = time.time()
         
         try:
@@ -113,12 +124,14 @@ class QueryExecutor:
                 
                 # 检查是否是SELECT查询
                 if sql.upper().strip().startswith('SELECT'):
-                    # 获取查询结果
-                    data = pd.DataFrame(result.fetchall(), columns=result.keys())
+                    # 获取查询结果 - 转换为字典列表而不是DataFrame
+                    rows = result.fetchall()
+                    columns = result.keys()
+                    data = [dict(zip(columns, row)) for row in rows]
                     affected_rows = len(data)
                 else:
                     # 非SELECT查询
-                    data = None
+                    data = []
                     affected_rows = result.rowcount if hasattr(result, 'rowcount') else 0
             
             execution_time = time.time() - start_time
@@ -137,37 +150,37 @@ class QueryExecutor:
             logger.info(f"查询执行成功，耗时: {execution_time:.3f}秒")
             return query_result
             
-        except SQLAlchemyError as e:
-            execution_time = time.time() - start_time
-            error_msg = str(e)
-            
-            # 创建失败结果
-            query_result = QueryResult(
-                success=False,
-                error=error_msg,
-                execution_time=execution_time
-            )
-            
-            # 记录查询历史
-            if connection_name or self.connection_manager.active_connection:
-                conn_name = connection_name or self.connection_manager.active_connection
-                self.query_history.add_query(sql, query_result, conn_name)
-            
-            logger.error(f"查询执行失败: {error_msg}")
-            return query_result
-        
         except Exception as e:
-            execution_time = time.time() - start_time
-            error_msg = f"未知错误: {str(e)}"
-            
-            query_result = QueryResult(
-                success=False,
-                error=error_msg,
-                execution_time=execution_time
-            )
-            
-            logger.error(f"查询执行异常: {error_msg}")
-            return query_result
+            if 'SQLAlchemyError' in str(type(e)):
+                execution_time = time.time() - start_time
+                error_msg = str(e)
+                
+                # 创建失败结果
+                query_result = QueryResult(
+                    success=False,
+                    error=error_msg,
+                    execution_time=execution_time
+                )
+                
+                # 记录查询历史
+                if connection_name or self.connection_manager.active_connection:
+                    conn_name = connection_name or self.connection_manager.active_connection
+                    self.query_history.add_query(sql, query_result, conn_name)
+                
+                logger.error(f"查询执行失败: {error_msg}")
+                return query_result
+            else:
+                execution_time = time.time() - start_time
+                error_msg = f"未知错误: {str(e)}"
+                
+                query_result = QueryResult(
+                    success=False,
+                    error=error_msg,
+                    execution_time=execution_time
+                )
+                
+                logger.error(f"查询执行异常: {error_msg}")
+                return query_result
     
     def execute_batch_queries(self, sql_statements: List[str], 
                             connection_name: Optional[str] = None) -> List[QueryResult]:
