@@ -1,0 +1,35 @@
+# 数据库连接配置示例
+
+# MySQL 连接配置
+mysql_example:
+  type: mysql
+  host: localhost
+  port: 3306
+  username: root
+  password: your_password
+  database: your_database
+
+# PostgreSQL 连接配置
+postgresql_example:
+  type: postgresql
+  host: localhost
+  port: 5432
+  username: postgres
+  password: your_password
+  database: your_database
+
+# SQLite 连接配置
+sqlite_example:
+  type: sqlite
+  database: /path/to/your/database.db
+
+# SQL Server 连接配置
+sqlserver_example:
+  type: sqlserver
+  host: localhost
+  username: sa
+  password: your_password
+  database: your_database
+
+# 注意：此文件仅作为配置示例，请勿在此文件中存储真实的密码信息
+# 实际使用时，请将配置信息保存到 database.yml 文件中
