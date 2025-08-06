@@ -6,12 +6,14 @@ SQL管理工具核心应用类
 
 import sys
 from typing import Dict, Any
-from loguru import logger
+import logging
 
 from ..database.connection_manager import ConnectionManager
 from ..database.query_executor import QueryExecutor
 from ..ui.main_window import MainWindow
 from ..utils.config import Config
+
+logger = logging.getLogger(__name__)
 
 
 class SQLManagerApp:

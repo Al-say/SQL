@@ -4,18 +4,30 @@
 负责管理多种数据库的连接，支持MySQL、PostgreSQL、SQLite、SQL Server等。
 """
 
-from typing import Dict, Any, Optional
-from sqlalchemy import create_engine, Engine
-from sqlalchemy.exc import SQLAlchemyError
-from loguru import logger
+from typing import Dict, Any, Optional, TYPE_CHECKING
 import json
 import os
+import logging
+
+# 可选依赖导入
+try:
+    from sqlalchemy import create_engine, Engine
+    from sqlalchemy.exc import SQLAlchemyError
+    HAS_SQLALCHEMY = True
+except ImportError:
+    HAS_SQLALCHEMY = False
+    # 为了类型检查创建假的类型
+    if TYPE_CHECKING:
+        from sqlalchemy import Engine
+
+# 使用标准库的logging而不是loguru
+logger = logging.getLogger(__name__)
 
 
 class DatabaseConnection:
     """数据库连接类"""
     
-    def __init__(self, name: str, engine: Engine, config: Dict[str, Any]):
+    def __init__(self, name: str, engine, config: Dict[str, Any]):
         self.name = name
         self.engine = engine
         self.config = config
@@ -23,9 +35,16 @@ class DatabaseConnection:
     
     def test_connection(self) -> bool:
         """测试连接是否有效"""
+        if not HAS_SQLALCHEMY:
+            return False
+            
         try:
             with self.engine.connect() as conn:
-                conn.execute("SELECT 1")
+                if HAS_SQLALCHEMY:
+                    from sqlalchemy import text
+                    conn.execute(text("SELECT 1"))
+                else:
+                    conn.execute("SELECT 1")
             return True
         except Exception:
             self.is_connected = False
@@ -56,13 +75,18 @@ class ConnectionManager:
         Returns:
             bool: 连接是否成功
         """
+        if not HAS_SQLALCHEMY:
+            logger.error("SQLAlchemy未安装，无法创建数据库连接")
+            return False
+            
         try:
             connection_string = self._build_connection_string(db_type, **kwargs)
             engine = create_engine(connection_string, echo=False)
             
             # 测试连接
             with engine.connect() as conn:
-                conn.execute("SELECT 1")
+                from sqlalchemy import text
+                conn.execute(text("SELECT 1"))
             
             # 保存连接
             config = {'type': db_type, **kwargs}

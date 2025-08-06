@@ -6,9 +6,17 @@
 
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
-import pandas as pd
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 import csv
+
+# 可选依赖导入
+try:
+    import pandas as pd
+    HAS_PANDAS = True
+except ImportError:
+    HAS_PANDAS = False
+    if TYPE_CHECKING:
+        import pandas as pd
 
 from ..database.query_executor import QueryResult
 
@@ -142,14 +150,21 @@ class ResultViewer:
             # 切换到消息标签页
             self.notebook.select(self.message_frame)
     
-    def show_data(self, data: pd.DataFrame):
+    def show_data(self, data):
         """显示数据表格"""
         # 清空现有数据
         for item in self.tree.get_children():
             self.tree.delete(item)
         
-        # 设置列
-        columns = list(data.columns)
+        # 根据数据类型处理
+        if HAS_PANDAS and hasattr(data, 'columns'):
+            # pandas DataFrame
+            columns = list(data.columns)
+        elif isinstance(data, list) and data:
+            # 字典列表
+            columns = list(data[0].keys()) if data else []
+        else:
+            columns = []
         self.tree['columns'] = columns
         self.tree['show'] = 'headings'
         
@@ -157,16 +172,34 @@ class ResultViewer:
         for col in columns:
             self.tree.heading(col, text=col)
             # 根据内容调整列宽
-            max_width = max(
-                len(str(col)) * 10,  # 标题宽度
-                max(len(str(value)) for value in data[col]) * 8 if len(data) > 0 else 50
-            )
+            if HAS_PANDAS and hasattr(data, 'columns'):
+                # pandas DataFrame
+                max_width = max(
+                    len(str(col)) * 10,  # 标题宽度
+                    max(len(str(value)) for value in data[col]) * 8 if len(data) > 0 else 50
+                )
+            else:
+                # 字典列表
+                max_width = max(
+                    len(str(col)) * 10,  # 标题宽度
+                    max(len(str(row.get(col, ''))) for row in data) * 8 if data else 50
+                )
             self.tree.column(col, width=min(max_width, 200), anchor='w')
         
         # 插入数据
-        for index, row in data.iterrows():
-            values = [str(value) if pd.notna(value) else '' for value in row]
-            self.tree.insert('', 'end', values=values)
+        if HAS_PANDAS and hasattr(data, 'iterrows'):
+            # pandas DataFrame
+            for index, row in data.iterrows():
+                if HAS_PANDAS:
+                    values = [str(value) if pd.notna(value) else '' for value in row]
+                else:
+                    values = [str(value) if value is not None else '' for value in row]
+                self.tree.insert('', 'end', values=values)
+        else:
+            # 字典列表
+            for row in data:
+                values = [str(row.get(col, '')) for col in columns]
+                self.tree.insert('', 'end', values=values)
     
     def show_message(self, message: str, msg_type: str = "info"):
         """显示消息"""
@@ -184,12 +217,12 @@ class ResultViewer:
         self.message_text.insert(tk.END, message)
         self.message_text.config(state=tk.DISABLED)
     
-    def show_statistics(self, data: pd.DataFrame):
+    def show_statistics(self, data):
         """显示统计信息"""
         self.stats_text.config(state=tk.NORMAL)
         self.stats_text.delete(1.0, tk.END)
         
-        stats_info = f"数据统计信息\\n{'='*50}\\n\\n"
+        stats_info = f"数据统计信息\n{'='*50}\n\n"
         stats_info += f"总行数: {len(data)}\\n"
         stats_info += f"总列数: {len(data.columns)}\\n\\n"
         
@@ -304,22 +337,34 @@ class ResultViewer:
     
     def show_chart(self):
         """显示图表"""
-        if not self.current_result or not self.current_result.success or self.current_result.data is None:
+        if not self.current_result or not self.current_result.success or not self.current_result.data:
             messagebox.showwarning("警告", "没有可用的数据")
             return
         
         try:
-            # 简单的图表显示功能
-            import matplotlib.pyplot as plt
-            from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+            # 检查是否有matplotlib
+            try:
+                import matplotlib.pyplot as plt
+                from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+            except ImportError:
+                messagebox.showerror("错误", "需要安装matplotlib来显示图表\n运行: pip install matplotlib")
+                return
             
             # 创建图表窗口
             chart_window = tk.Toplevel(self.parent)
             chart_window.title("数据图表")
             chart_window.geometry("800x600")
             
+            # 将数据转换为适合分析的格式
+            if not HAS_PANDAS:
+                messagebox.showinfo("提示", "需要pandas来进行数据分析\n运行: pip install pandas")
+                chart_window.destroy()
+                return
+                
+            df = pd.DataFrame(self.current_result.data)
+            
             # 获取数值列
-            numeric_cols = self.current_result.data.select_dtypes(include=['number']).columns
+            numeric_cols = df.select_dtypes(include=['number']).columns
             
             if len(numeric_cols) == 0:
                 messagebox.showinfo("提示", "没有数值列可以绘制图表")

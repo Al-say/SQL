@@ -5,10 +5,19 @@
 """
 
 import os
-import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional
-from loguru import logger
+import logging
+import json
+
+# 可选依赖导入
+try:
+    import yaml
+    HAS_YAML = True
+except ImportError:
+    HAS_YAML = False
+
+logger = logging.getLogger(__name__)
 
 
 class Config:
@@ -87,7 +96,18 @@ def load_config(config_file: Optional[str] = None) -> Config:
     if config_file and os.path.exists(config_file):
         try:
             with open(config_file, 'r', encoding='utf-8') as f:
-                file_config = yaml.safe_load(f)
+                # 根据文件扩展名选择解析器
+                if config_file.endswith('.json'):
+                    file_config = json.load(f)
+                elif config_file.endswith('.yml') or config_file.endswith('.yaml'):
+                    if HAS_YAML:
+                        file_config = yaml.safe_load(f)
+                    else:
+                        logger.error(f"需要安装PyYAML来加载YAML配置文件: {config_file}")
+                        raise ImportError("PyYAML not installed")
+                else:
+                    # 默认尝试JSON
+                    file_config = json.load(f)
             
             # 合并配置
             merged_config = merge_dict(default_config, file_config)
@@ -128,8 +148,24 @@ def save_config(config: Config, config_file: str):
         os.makedirs(os.path.dirname(config_file), exist_ok=True)
         
         with open(config_file, 'w', encoding='utf-8') as f:
-            yaml.dump(config.data, f, default_flow_style=False, 
-                     allow_unicode=True, indent=2)
+            # 根据文件扩展名选择保存格式
+            if config_file.endswith('.json'):
+                json.dump(config.data, f, indent=2, ensure_ascii=False)
+            elif config_file.endswith('.yml') or config_file.endswith('.yaml'):
+                if HAS_YAML:
+                    yaml.dump(config.data, f, default_flow_style=False, 
+                             allow_unicode=True, indent=2)
+                else:
+                    logger.error(f"需要安装PyYAML来保存YAML配置文件: {config_file}")
+                    # 回退到JSON格式
+                    json_file = config_file.rsplit('.', 1)[0] + '.json'
+                    with open(json_file, 'w', encoding='utf-8') as json_f:
+                        json.dump(config.data, json_f, indent=2, ensure_ascii=False)
+                    logger.info(f"已保存为JSON格式: {json_file}")
+                    return
+            else:
+                # 默认保存为JSON
+                json.dump(config.data, f, indent=2, ensure_ascii=False)
         
         logger.info(f"配置已保存到: {config_file}")
         
@@ -190,14 +226,24 @@ def create_sample_config():
         }
     }
     
-    config_file = os.path.join(get_config_dir(), 'config.example.yml')
+    # 创建YAML和JSON两种格式的示例配置
+    yaml_file = os.path.join(get_config_dir(), 'config.example.yml')
+    json_file = os.path.join(get_config_dir(), 'config.example.json')
     
     try:
-        with open(config_file, 'w', encoding='utf-8') as f:
-            yaml.dump(sample_config, f, default_flow_style=False, 
-                     allow_unicode=True, indent=2)
+        # 创建JSON格式（始终可用）
+        with open(json_file, 'w', encoding='utf-8') as f:
+            json.dump(sample_config, f, indent=2, ensure_ascii=False)
+        print(f"示例配置文件已创建: {json_file}")
         
-        print(f"示例配置文件已创建: {config_file}")
+        # 如果有YAML支持，也创建YAML格式
+        if HAS_YAML:
+            with open(yaml_file, 'w', encoding='utf-8') as f:
+                yaml.dump(sample_config, f, default_flow_style=False, 
+                         allow_unicode=True, indent=2)
+            print(f"示例配置文件已创建: {yaml_file}")
+        else:
+            print("提示: 安装PyYAML可以使用YAML格式配置文件")
         
     except Exception as e:
         print(f"创建示例配置文件失败: {e}")

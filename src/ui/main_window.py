@@ -6,8 +6,11 @@ SQL管理工具的主要用户界面，提供查询编辑器、结果显示、�
 
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
-import pandas as pd
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, TYPE_CHECKING
+
+# 可选依赖导入
+if TYPE_CHECKING:
+    import pandas as pd
 
 from ..database.connection_manager import ConnectionManager
 from ..database.query_executor import QueryExecutor
